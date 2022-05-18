@@ -1,7 +1,8 @@
-package logging
+package log
 
 import (
 	"fmt"
+	"gin-gorm-practice/conf"
 	"github.com/astaxie/beego/logs"
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
@@ -12,16 +13,13 @@ import (
 
 type ZapLevel int
 
-var LoggoZap *zap.Logger
-
-//var DefaultCallerDepthZap = 3
+var Logger *zap.Logger
 
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil || os.IsExist(err)
 }
 
-// 获取日志编码器
 func getLogWriter(fileName string) zapcore.WriteSyncer {
 	dir, _ := os.Getwd() // 获取当前目录
 	dir = dir + "/runtime/logs"
@@ -31,31 +29,25 @@ func getLogWriter(fileName string) zapcore.WriteSyncer {
 	}
 	lumberJackLogger := &lumberjack.Logger{
 		Filename:   dir + "/" + fileName, // 日志文件路径
-		MaxSize:    1,                    // megabytes
-		MaxBackups: 3,
-		MaxAge:     28,   //days
-		Compress:   true, // disabled by default
+		MaxSize:    1,                    // 设置日志文件最大尺寸
+		MaxBackups: 3,                    // 设置日志文件最多保存多少个备份
+		MaxAge:     28,                   // 设置日志文件最多保存多少天
+		Compress:   true,                 // 是否压缩 disabled by default
 	}
-	//return zapcore.AddSync(ZapF)
-	// 这里说明输出是在文件中
+	// 返回同步方式写入日志文件的zapcore.WriteSyncer
 	return zapcore.AddSync(lumberJackLogger)
 }
 
-// getEncoderCore 获取Encoder的zapcore.Core
 func getEncoderCore(fileName string, level zapcore.LevelEnabler) (core zapcore.Core) {
 	writer := getLogWriter(fileName) // 使用file-rotatelogs进行日志分割
 	return zapcore.NewCore(getEncoder(), writer, level)
 }
 
-// getEncoder 获取zapcore.Encoder
 func getEncoder() zapcore.Encoder {
-	//if format == "json" {
-	//	return zapcore.NewJSONEncoder(getEncoderConfig())
-	//}
 	return zapcore.NewConsoleEncoder(getEncoderConfig())
+	//	return zapcore.NewJSONEncoder(getEncoderConfig())
 }
 
-// getEncoderConfig 获取zapcore.EncoderConfig
 func getEncoderConfig() (config zapcore.EncoderConfig) {
 	config = zapcore.EncoderConfig{
 		MessageKey:     "message",
@@ -76,13 +68,10 @@ func getEncoderConfig() (config zapcore.EncoderConfig) {
 
 // CustomTimeEncoder 自定义日志输出时间格式
 func CustomTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-	// v0.4.2 这里不需要配置 zap.AddCaller() 就可以获取到文件名和行号; 这里配置会输出zap包的文件名和行号 影响使用
-	//_, file, line, _ := runtime.Caller(DefaultCallerDepthZap) // 获取调用层级
-	//logPrefix = fmt.Sprintf("[%s:%d]", file, line)            // 格式化前缀
-	enc.AppendString(t.Format("2006/01/02 - 15:04:05.000"))
+	enc.AppendString(t.Format(conf.LogSetting.TimeFormat))
 }
 
-func init() {
+func Init() {
 	// 调试级别
 	debugPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool {
 		return lev == zap.DebugLevel
@@ -109,14 +98,14 @@ func init() {
 	})
 
 	cores := [...]zapcore.Core{
-		getEncoderCore(fmt.Sprintf("./%s/server_debug.log", "./zap_log"), debugPriority),
-		getEncoderCore(fmt.Sprintf("./%s/server_info.log", "./zap_log"), infoPriority),
-		getEncoderCore(fmt.Sprintf("./%s/server_warn.log", "./zap_log"), warnPriority),
-		getEncoderCore(fmt.Sprintf("./%s/server_error.log", "./zap_log"), errorPriority),
-		getEncoderCore(fmt.Sprintf("./%s/server_panic.log", "./zap_log"), panicPriority),
-		getEncoderCore(fmt.Sprintf("./%s/server_fatal.log", "./zap_log"), fatalPriority),
+		getEncoderCore(fmt.Sprintf("./debug.log"), debugPriority),
+		getEncoderCore(fmt.Sprintf("./info.log"), infoPriority),
+		getEncoderCore(fmt.Sprintf("./warn.log"), warnPriority),
+		getEncoderCore(fmt.Sprintf("./error.log"), errorPriority),
+		getEncoderCore(fmt.Sprintf("./panic.log"), panicPriority),
+		getEncoderCore(fmt.Sprintf("./fatal.log"), fatalPriority),
 	}
 
 	// zap.AddCaller() 可以获取到文件名和行号
-	LoggoZap = zap.New(zapcore.NewTee(cores[:]...), zap.AddCaller())
+	Logger = zap.New(zapcore.NewTee(cores[:]...), zap.AddCaller())
 }
